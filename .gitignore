@@ -13,3 +13,5 @@ __pycache__
 *.spec
 *.swp
 example2training.ipynb
+/datasets
+best_model.keras
