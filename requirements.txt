@@ -1,0 +1,31 @@
+# TensorFlow and ML dependencies
+tensorflow==2.16.2
+tensorflow-datasets==4.9.3
+keras==3.10.0
+numpy==1.26.4
+protobuf==4.21.12
+
+# Data visualization
+matplotlib==3.9.4
+
+# USB and serial communication (for flashing the board)
+pyusb==1.2.0
+pyserial==3.5
+hidapi==0.10.1
+
+# Jupyter notebook support
+ipykernel
+ipython
+jupyter_client
+jupyter_core
+
+# Utility packages
+h5py==3.14.0
+pillow==11.3.0
+requests==2.32.5
+tqdm==4.67.1
+progress==1.5
+
+# Build and packaging tools
+setuptools
+wheel
