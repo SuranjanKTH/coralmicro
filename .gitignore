@@ -15,3 +15,6 @@ __pycache__
 example2training.ipynb
 /datasets
 best_model.keras
+events.out*
+/trained_models
+*int8_edgetpu*

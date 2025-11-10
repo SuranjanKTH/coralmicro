@@ -50,7 +50,7 @@ constexpr int kAudioBufferSize =
     kAudioBufferSizeMs * tensorflow::kKeywordDetectorSampleRateMs;
 
 // Model and inference configuration
-constexpr float kThreshold = 0.5;  // Confidence threshold (50%)
+constexpr float kThreshold = 0.75;  // Confidence threshold (75%)
 constexpr int kTopK = 3;           // Show top 3 predictions
 constexpr char kModelName[] = "/models/model_int8_edgetpu.tflite";
 
