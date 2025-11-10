@@ -15,6 +15,8 @@
 // Keyword spotting example for "left", "right", "go" navigation commands
 // Based on the classify_speech example, adapted for custom trained model
 
+#include <cmath>
+
 #include "libs/audio/audio_service.h"
 #include "libs/base/filesystem.h"
 #include "libs/base/timer.h"
@@ -50,7 +52,7 @@ constexpr int kAudioBufferSize =
     kAudioBufferSizeMs * tensorflow::kKeywordDetectorSampleRateMs;
 
 // Model and inference configuration
-constexpr float kThreshold = 0.75;  // Confidence threshold (75%)
+constexpr float kThreshold = 0.50;  // Confidence threshold (50%)
 constexpr int kTopK = 3;           // Show top 3 predictions
 constexpr char kModelName[] = "/models/model_int8_edgetpu.tflite";
 
@@ -70,6 +72,15 @@ constexpr int kNumLabels = 5;
 // Run inference on the audio input
 void run(tflite::MicroInterpreter* interpreter, FrontendState* frontend_state) {
   auto input_tensor = interpreter->input_tensor(0);
+
+  // Calculate audio loudness (RMS level)
+  int64_t sum_squares = 0;
+  for (size_t i = 0; i < audio_input.size(); ++i) {
+    int32_t sample = audio_input[i];
+    sum_squares += sample * sample;
+  }
+  float rms = sqrtf(static_cast<float>(sum_squares) / audio_input.size());
+  float loudness_db = 20.0f * log10f(rms / 32768.0f + 1e-10f);  // dB relative to full scale
 
   // Preprocess audio into spectrogram features
   auto preprocess_start = TimerMillis();
@@ -105,28 +116,28 @@ void run(tflite::MicroInterpreter* interpreter, FrontendState* frontend_state) {
   uint8_t confidence = max_score + 128;
   float probability = confidence / 255.0f;
 
-  // Only print if above threshold and not silence/unknown
-  if (probability > kThreshold && max_index >= 0 && max_index <= 2) {
-    printf("\r\n");
-    printf("==========================================\r\n");
-    printf("DETECTED: %s (confidence: %.2f%%)\r\n",
-           labels[max_index], probability * 100.0f);
-    printf("==========================================\r\n");
+  // Always show prediction for debugging
+  printf("Prediction: %s (%.2f%%) | ", labels[max_index], probability * 100.0f);
 
-    // Show all class scores for debugging
-    printf("All scores:\r\n");
-    for (int i = 0; i < kNumLabels; i++) {
-      uint8_t score = output_tensor->data.int8[i] + 128;
-      printf("  %s: %.2f%%\r\n", labels[i], (score / 255.0f) * 100.0f);
-    }
-    printf("\r\n");
+  // Show all class scores
+  printf("Scores: ");
+  for (int i = 0; i < kNumLabels; i++) {
+    uint8_t score = output_tensor->data.int8[i] + 128;
+    printf("%s:%.1f%% ", labels[i], (score / 255.0f) * 100.0f);
+  }
+  printf("| ");
+
+  // Highlight if above threshold and is a keyword
+  if (probability > kThreshold && max_index >= 0 && max_index <= 2) {
+    printf("*** DETECTED: %s ***", labels[max_index]);
   }
 
-  // Print timing information
-  printf("Preprocess: %lums, Inference: %lums, Total: %lums\r\n",
+  // Print timing and audio level information
+  printf("Audio level: %.1f dB | RMS: %.0f | Preprocess: %lums, Inference: %lums\r\n",
+         loudness_db,
+         rms,
          static_cast<uint32_t>(preprocess_end - preprocess_start),
-         static_cast<uint32_t>(inference_end - preprocess_end),
-         static_cast<uint32_t>(inference_end - preprocess_start));
+         static_cast<uint32_t>(inference_end - preprocess_end));
 }
 
 }  // namespace
@@ -175,16 +186,36 @@ void run(tflite::MicroInterpreter* interpreter, FrontendState* frontend_state) {
   auto* output = interpreter.output_tensor(0);
   printf("\r\n");
   printf("Model Info:\r\n");
-  printf("  Input shape: [%d, %d]\r\n",
-         input->dims->data[0], input->dims->data[1]);
+
+  // Print actual tensor dimensions
+  printf("  Model expects input shape: ");
+  if (input->dims->size == 2) {
+    printf("[%d, %d] = %d features\r\n",
+           input->dims->data[0], input->dims->data[1],
+           input->dims->data[1]);
+  } else if (input->dims->size == 3) {
+    printf("[%d, %d, %d] = %d features\r\n",
+           input->dims->data[0], input->dims->data[1], input->dims->data[2],
+           input->dims->data[1] * input->dims->data[2]);
+  }
+
+  printf("  KeywordDetector preprocessing produces: [1, 198, 32] = 6336 features\r\n");
+  printf("  MISMATCH: Model trained with [1, 49, 40] = 1960 features!\r\n");
+  printf("\r\n");
   printf("  Input type: %s\r\n",
          input->type == kTfLiteInt8 ? "INT8" : "UNKNOWN");
   printf("  Output shape: [%d, %d]\r\n",
          output->dims->data[0], output->dims->data[1]);
   printf("  Output type: %s\r\n",
          output->type == kTfLiteInt8 ? "INT8" : "UNKNOWN");
-  printf("  Expected input size: 1960 (49 time steps x 40 mel bins)\r\n");
   printf("  Number of classes: %d\r\n", kNumLabels);
+  printf("\r\n");
+  printf("WARNING: Preprocessing mismatch detected!\r\n");
+  printf("The model will receive wrong-shaped input and produce garbage output.\r\n");
+  printf("You need to retrain with KeywordDetector-compatible parameters:\r\n");
+  printf("  - 2 seconds audio (not 1 second)\r\n");
+  printf("  - 25ms window, 10ms stride (not 30ms/20ms)\r\n");
+  printf("  - 32 mel bins (not 40)\r\n");
   printf("\r\n");
 
   // Setup audio frontend (spectrogram preprocessing)
