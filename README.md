@@ -37,7 +37,7 @@ them to your board with the included flashtool (`scripts/flashtool.py`).
 1. Clone `coralmicro` and all submodules:
 
     ```bash
-    git clone --recurse-submodules -j8 https://github.com/google-coral/coralmicro
+    git clone --recurse-submodules -j8 https://github.com/SuranjanKTH/coralmicro
     ```
 
 2. Install the required tools:
