@@ -59,15 +59,14 @@ constexpr char kModelName[] = "/models/model_int8_edgetpu.tflite";
 // Audio input buffer
 std::array<int16_t, tensorflow::kKeywordDetectorAudioSize> audio_input;
 
-// Label names for our 5-class model
+// Label names for our 4-class model
 const char* labels[] = {
     "left",     // 0
     "right",    // 1
     "go",       // 2
-    "unknown",  // 3
-    "silence"   // 4
+    "unknown"   // 3 (includes silence)
 };
-constexpr int kNumLabels = 5;
+constexpr int kNumLabels = 4;
 
 // Run inference on the audio input
 void run(tflite::MicroInterpreter* interpreter, FrontendState* frontend_state) {

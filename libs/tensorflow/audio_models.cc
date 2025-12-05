@@ -103,17 +103,59 @@ void KeywordDetectorPreprocessInput(const int16_t* audio_data,
   PreprocessAudioInput(audio_data, frontend_state, kYAMNet, feature_buffer,
                        kKeywordDetectorAudioSize);
 
-  auto* input = tflite::GetTensorData<uint8>(input_tensor);
+  // Get quantization parameters from the model
+  const float model_scale = input_tensor->params.scale;
+  const float model_zero_point = input_tensor->params.zero_point;
 
-  const auto [min, max] =
-      std::minmax_element(std::begin(feature_buffer), std::end(feature_buffer));
+  // Support both int8 and uint8 tensor types
+  if (input_tensor->type == kTfLiteInt8) {
+    auto* input = tflite::GetTensorData<int8_t>(input_tensor);
 
-  float scale = static_cast<float>(*max - *min) / 256.0f;
+    // Find min/max of feature buffer for normalization
+    const auto [min, max] =
+        std::minmax_element(std::begin(feature_buffer), std::end(feature_buffer));
 
-  for (int i = 0; i < kKeywordDetectorFeatureElementCount; ++i) {
-    // This conversion allows for requantization from int16 to uint8
-    input[i] = static_cast<uint8_t>(
-        static_cast<float>(feature_buffer[i] - *min) / scale);
+    // Convert int16 features to int8 using model's quantization parameters
+    // Formula: quantized_value = (float_value / scale) + zero_point
+    float feature_range = static_cast<float>(*max - *min);
+    if (feature_range == 0.0f) {
+      feature_range = 1.0f;  // Avoid division by zero
+    }
+
+    for (int i = 0; i < kKeywordDetectorFeatureElementCount; ++i) {
+      // Normalize feature to [0, 1] range, then to approximate float range [-10, 0]
+      // (typical log mel spectrogram range)
+      float normalized = static_cast<float>(feature_buffer[i] - *min) / feature_range;
+      float float_value = (normalized * 10.0f) - 10.0f;  // Map to [-10, 0]
+
+      // Apply model's quantization: quantized = float / scale + zero_point
+      float quantized = (float_value / model_scale) + model_zero_point;
+
+      // Clamp to int8 range [-128, 127]
+      if (quantized > 127.0f) {
+        input[i] = 127;
+      } else if (quantized < -128.0f) {
+        input[i] = -128;
+      } else {
+        input[i] = static_cast<int8_t>(quantized);
+      }
+    }
+  } else if (input_tensor->type == kTfLiteUInt8) {
+    // Legacy uint8 path (kept for backward compatibility)
+    auto* input = tflite::GetTensorData<uint8_t>(input_tensor);
+
+    const auto [min, max] =
+        std::minmax_element(std::begin(feature_buffer), std::end(feature_buffer));
+
+    float scale = static_cast<float>(*max - *min) / 256.0f;
+    if (scale == 0.0f) {
+      scale = 1.0f;
+    }
+
+    for (int i = 0; i < kKeywordDetectorFeatureElementCount; ++i) {
+      input[i] = static_cast<uint8_t>(
+          static_cast<float>(feature_buffer[i] - *min) / scale);
+    }
   }
 }
 
