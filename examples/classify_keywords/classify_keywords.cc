@@ -267,8 +267,9 @@ void run(tflite::MicroInterpreter* interpreter, FrontendState* frontend_state) {
     // Run inference
     run(&interpreter, &frontend_state);
 
-    // Rate limit inference (1 second intervals)
-    vTaskDelay(pdMS_TO_TICKS(tensorflow::kKeywordDetectorDurationMs));
+    // Rate limit inference (500ms intervals for 75% overlap)
+    // This ensures keywords spoken at window boundaries are captured
+    vTaskDelay(pdMS_TO_TICKS(500));
   }
 }
 
